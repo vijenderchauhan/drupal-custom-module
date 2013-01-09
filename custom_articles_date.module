@@ -1,0 +1,78 @@
+<?php
+/**
+ * @file
+ * This is an Custom Article Date module used to change date of every article node with today date, when any user will click on "Set as Today" link.
+ *
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function custom_articles_date_node_view($node, $view_mode, $langcode) {
+  drupal_add_library('system', 'drupal.ajax');
+  drupal_add_library('system', 'jquery.form');
+  $query = array(
+   'tok' => drupal_get_token('protect_csrf_attacks' . $node->nid)
+  );
+  switch ($node->type) {
+    case 'article':
+      $node->content['set_as_today_link'] = array(
+          '#weight' => 10,
+          '#theme' => 'link',
+          '#path' => 'set-today-date/nojs/'.$node->nid,
+          '#text' => t('Set as Today'),
+  	  '#options' => array(
+              'attributes' => array("class" => 'use-ajax'),
+              'html' => TRUE, 
+			  'query' => $query,
+          ),
+      );
+      break;
+  }
+}
+
+/*
+ * hook_menu function to register paths in order to define how ajax URL requests are handled. 
+*/
+function custom_articles_date_menu() {
+  $items = array();
+  $items['set-today-date/%/%'] = array(
+    'title' => 'Videos',
+    'page callback' => 'date_callback_function',
+    'access callback' => TRUE,
+	'page arguments' => array(1, 2),
+    'type' => MENU_CALLBACK,
+  );
+  return $items;	
+}
+
+/*
+ * Callback function to change the date of article with today date. 
+*/
+
+function date_callback_function($type = '', $nid = 0){
+  
+  /* Validations against CSRF attack. */
+  if (empty($_GET['tok']) || !drupal_valid_token($_GET['tok'], 'protect_csrf_attacks' . $nid)) {
+    return MENU_ACCESS_DENIED;
+  }
+  
+  /* Update in database this date field value. */
+  db_update('field_data_field_date') 
+		->fields(array(
+		'field_date_value' => time(),
+	))
+	->condition('entity_id', $nid, '=')
+	->execute();
+	
+  if($type == "ajax") {
+    $commands = array();
+    $commands[] = ajax_command_insert('.date-display-single', date("l, F j, Y - g:i a"));
+    ajax_deliver(array('#type' => 'ajax', '#commands' => $commands));
+  } else {
+	$destination = $_GET['q'];
+	drupal_goto($destination);
+  }  
+  /* Clear cache for this id to reflect change immediately on refresh of page too. */
+  cache_clear_all('field:node:'.$nid, 'cache_field');
+}
